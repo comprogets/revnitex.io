@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RevniteX — Smart Fuel & Ride Assistant</title>
+
+  <!-- Leaflet (maps) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+  :root{
+    --bg:#0d0d0d; --card:#181818; --soft:#111; --text:#efece7; --accent:#f5b041; --danger:#ff5b5b;
+    --muted: #bfbfbf; --radius:14px;
+  }
+  body.light-mode{
+    --bg:#fafafa; --card:#fff; --soft:#f2f2f2; --text:#111; --accent:#d48f18; --danger:#d64545; --muted:#666;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:"Poppins",system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  body{background:var(--bg);color:var(--text);display:flex;justify-content:center;padding:18px;transition:background .25s,color .25s;}
+  .device{width:100%;max-width:420px;height:calc(100vh - 36px);background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.6);}
+  .app-header{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--card);border-bottom:1px solid rgba(255,255,255,0.03)}
+  .brand{font-weight:800;color:var(--accent);font-size:18px}
+  .header-right{display:flex;align-items:center;gap:10px}
+  .greeting{font-size:13px;color:var(--text);font-weight:600}
+  .icon-btn{background:none;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:6px;border-radius:8px}
+  .icon-btn:active{transform:scale(.98)}
+
+  .app-body { flex:1; overflow:auto; padding:16px; background:transparent; }
+  .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.02)}
+  .card-title{font-weight:700;color:var(--accent);margin-bottom:8px}
+  .form{display:flex;flex-direction:column;gap:10px}
+  input,select,button,textarea{padding:10px;border-radius:10px;border:none;outline:none;font-size:14px;background:rgba(255,255,255,0.02);color:var(--text)}
+  input::placeholder{color:rgba(255,255,255,0.25)}
+  button{background:var(--accent);color:#000;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text)}
+  .muted{color:var(--muted);font-size:13px}
+  .result{margin-top:8px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.02)}
+  .list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+  .list li{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02)}
+  .logout{background:var(--danger);color:#fff}
+
+  .map{width:100%;height:200px;border-radius:10px;background:#111;margin-top:8px;overflow:hidden}
+  .bottom-nav{height:66px;background:var(--card);display:flex;justify-content:space-around;align-items:center;border-top:1px solid rgba(255,255,255,0.03);gap:6px;padding:6px}
+  .tab{flex:1;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;border:none;background:none;color:var(--muted);font-weight:700;cursor:pointer;border-radius:10px}
+  .tab.active{color:var(--accent);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));box-shadow:inset 0 -2px 0 rgba(0,0,0,0.2)}
+  .hidden{display:none !important}
+
+  /* modal */
+  .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.65));z-index:999}
+  .modal .panel{width:92%;max-width:380px;padding:18px;border-radius:14px;background:var(--card)}
+  .pill-toggle{display:flex;gap:8px;margin-bottom:8px}
+  .pill-toggle button{flex:0;padding:8px 12px;border-radius:999px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);cursor:pointer}
+  .pill-toggle button.active{background:var(--accent);color:#000;border:none}
+
+  /* small */
+  .small{font-size:13px;color:var(--muted)}
+  .tips-row{display:flex;gap:8px;margin-top:10px}
+  .btn-sm{padding:8px 10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);cursor:pointer}
+  .ach{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);margin-top:10px}
+
+  /* scrollbar */
+  .app-body::-webkit-scrollbar{width:10px}
+  .app-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:10px}
+
+  @media (max-height:640px){ .map{height:160px} }
+  </style>
+</head>
+<body>
+  <div class="device" role="application" aria-label="RevniteX app">
+    <header class="app-header">
+      <div class="brand">RevniteX</div>
+      <div class="header-right">
+        <div id="greeting" class="greeting">Welcome!</div>
+        <button id="themeToggle" class="icon-btn" title="Toggle theme">🌙</button>
+        <button id="logoutTop" class="icon-btn" title="Log out" style="display:none">🚪</button>
+      </div>
+    </header>
+
+    <!-- FUEL tab -->
+    <section id="fuelTab" class="app-body">
+      <div class="card">
+        <div class="card-title">Fuel Consumption Calculator</div>
+        <div class="form">
+          <label class="small">Distance (km)</label>
+          <input id="distance" type="number" placeholder="e.g. 56" />
+          <label class="small">Fuel Efficiency (km / L)</label>
+          <input id="efficiency" type="number" placeholder="e.g. 35" />
+          <label class="small">Fuel Type</label>
+          <select id="fuelType">
+            <option value="unleaded">Unleaded — ₱60/L</option>
+            <option value="premium">Premium — ₱70/L</option>
+          </select>
+          <button id="calcFuel">Calculate</button>
+          <div id="fuelResult" class="result hidden"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Live Map Tracker</div>
+        <div style="display:flex;gap:8px">
+          <button id="getPosition" class="btn-sm">Get Position</button>
+          <button id="startStopTrack" class="btn-sm">Start Tracking</button>
+        </div>
+        <div id="map" class="map"></div>
+        <div class="small" style="margin-top:8px">Use Get Position to center the map. Start Tracking will follow your location.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Fuel Efficiency Tips</div>
+        <div class="small">Use higher gears when possible for fuel economy.</div>
+        <div class="tips-row">
+          <button id="newTip" class="btn-sm">New Tip</button>
+          <button id="copyTip" class="btn-sm">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRIP tab -->
+    <section id="tripTab" class="app-body hidden">
+      <div class="card">
+        <div class="card-title">Trip Cost Estimator</div>
+        <div class="form">
+          <label class="small">Planned Trip (km)</label>
+          <input id="tripDistance" type="number" placeholder="e.g. 120" />
+          <div class="small">Use fuel efficiency from fuel tab (if set)</div>
+          <button id="estimateTrip">Estimate Cost & CO₂</button>
+
+          <div id="tripResult" class="result hidden"></div>
+          <button id="saveTrip" class="btn-sm" style="margin-top:10px">💾 Save Trip</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Achievements & Maintenance</div>
+        <div class="small">Trips saved: <span id="tripsCount">0</span>. Complete 5 trips to earn a badge.</div>
+        <div style="margin-top:8px">
+          <button id="reminder" class="btn-sm">Maintenance Reminder</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATIONS tab -->
+    <section id="stationsTab" class="app-body hidden">
+      <div class="card">
+        <div class="card-title">Nearest Gas Stations</div>
+        <button id="findStations" class="btn-sm">Find Stations Nearby</button>
+        <div id="stationsMap" class="map" style="margin-top:10px"></div>
+        <ul id="stationsList" class="list" style="margin-top:10px"></ul>
+      </div>
+    </section>
+
+    <!-- PROFILE tab -->
+    <section id="profileTab" class="app-body hidden">
+      <div class="card">
+        <div class="card-title">Profile & Vehicles</div>
+        <label class="small">Vehicle Name</label>
+        <input id="vehicleName" placeholder="e.g. Honda City" />
+        <button id="addVehicle" class="btn-sm" style="margin-top:8px">Add Vehicle</button>
+
+        <ul id="vehicleList" class="list" style="margin-top:12px"></ul>
+        <button id="logoutBtn" class="logout" style="margin-top:12px">Log Out</button>
+      </div>
+    </section>
+
+    <!-- bottom nav -->
+    <footer id="navBar" class="bottom-nav">
+      <button class="tab active" data-tab="fuelTab">⛽ Fuel</button>
+      <button class="tab" data-tab="tripTab">🧭 Trip</button>
+      <button class="tab" data-tab="stationsTab">⛽ Stations</button>
+      <button class="tab" data-tab="profileTab">👤 Profile</button>
+    </footer>
+  </div>
+
+  <!-- Login/Register Modal (shows when not authenticated) -->
+  <div id="authModal" class="modal" aria-hidden="true">
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-weight:800;font-size:20px;color:var(--accent)">RevniteX</div>
+      </div>
+
+      <div class="pill-toggle">
+        <button id="tabLogin" class="active">Login</button>
+        <button id="tabRegister">Register</button>
+      </div>
+
+      <div id="loginForm">
+        <input id="authEmail" type="email" placeholder="Email" />
+        <input id="authPass" type="password" placeholder="Password" style="margin-top:8px" />
+        <button id="doLogin" style="margin-top:10px">Login</button>
+      </div>
+
+      <div id="registerForm" class="hidden">
+        <input id="regEmail" type="email" placeholder="Email" />
+        <input id="regPass" type="password" placeholder="Password" style="margin-top:8px" />
+        <button id="doRegister" style="margin-top:10px">Create account</button>
+      </div>
+
+      <div class="small" style="margin-top:10px">By using this app you agree to test/demo usage of RevniteX.</div>
+    </div>
+  </div>
+
+  <script type="module">
+  // Firebase imports
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
+
+  // Your firebase config (kept from your snippet)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCTkxa6C84Q5yYXdrezMAqk6xMgpZXSb4M",
+    authDomain: "revnitex.firebaseapp.com",
+    projectId: "revnitex",
+    storageBucket: "revnitex.firebasestorage.app",
+    messagingSenderId: "1078469124147",
+    appId: "1:1078469124147:web:2cb80cdde5ffc0cb7c4346"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  /* ---------- UI references ---------- */
+  const authModal = document.getElementById('authModal');
+  const tabLogin = document.getElementById('tabLogin');
+  const tabRegister = document.getElementById('tabRegister');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const doLogin = document.getElementById('doLogin');
+  const doRegister = document.getElementById('doRegister');
+
+  const greeting = document.getElementById('greeting');
+  const logoutTop = document.getElementById('logoutTop');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  const tabs = document.querySelectorAll('.tab');
+  const sections = { fuelTab: document.getElementById('fuelTab'), tripTab: document.getElementById('tripTab'), stationsTab: document.getElementById('stationsTab'), profileTab: document.getElementById('profileTab') };
+
+  // Fuel elements
+  const distanceEl = document.getElementById('distance');
+  const efficiencyEl = document.getElementById('efficiency');
+  const fuelTypeEl = document.getElementById('fuelType');
+  const calcFuelBtn = document.getElementById('calcFuel');
+  const fuelResult = document.getElementById('fuelResult');
+
+  // Map/tracking
+  let map, marker, trackId=null, stationsMap, stationsMarkers = [];
+  const mapEl = document.getElementById('map');
+  const stationsMapEl = document.getElementById('stationsMap');
+  const getPositionBtn = document.getElementById('getPosition');
+  const startStopTrackBtn = document.getElementById('startStopTrack');
+
+  // Tips
+  const newTipBtn = document.getElementById('newTip');
+  const copyTipBtn = document.getElementById('copyTip');
+
+  // Trip
+  const tripDistanceEl = document.getElementById('tripDistance');
+  const estimateTripBtn = document.getElementById('estimateTrip');
+  const tripResult = document.getElementById('tripResult');
+  const saveTripBtn = document.getElementById('saveTrip');
+  const tripsCountEl = document.getElementById('tripsCount');
+
+  // Stations
+  const findStationsBtn = document.getElementById('findStations');
+  const stationsList = document.getElementById('stationsList');
+
+  // Profile
+  const vehicleName = document.getElementById('vehicleName');
+  const addVehicleBtn = document.getElementById('addVehicle');
+  const vehicleList = document.getElementById('vehicleList');
+
+  // Theme toggle
+  const themeToggle = document.getElementById('themeToggle');
+
+  /* ---------- helpers ---------- */
+  function showSection(id){
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    Object.keys(sections).forEach(k => sections[k].classList.toggle('hidden', k !== id));
+  }
+
+  // Nav tab clicks
+  tabs.forEach(btn => btn.addEventListener('click', () => showSection(btn.dataset.tab)));
+
+  // modal toggle between login/register
+  tabLogin.addEventListener('click', () => { tabLogin.classList.add('active'); tabRegister.classList.remove('active'); loginForm.classList.remove('hidden'); registerForm.classList.add('hidden'); });
+  tabRegister.addEventListener('click', () => { tabRegister.classList.add('active'); tabLogin.classList.remove('active'); registerForm.classList.remove('hidden'); loginForm.classList.add('hidden'); });
+
+  // Register and login handlers
+  doRegister.addEventListener('click', async () => {
+    const email = document.getElementById('regEmail').value.trim();
+    const pass = document.getElementById('regPass').value;
+    if(!email || !pass){ alert('Enter email and password'); return; }
+    try { await createUserWithEmailAndPassword(auth, email, pass); alert('Account created'); }
+    catch(e){ alert('Register error: ' + e.message); }
+  });
+
+  doLogin.addEventListener('click', async () => {
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value;
+    if(!email || !pass){ alert('Enter email and password'); return; }
+    try { await signInWithEmailAndPassword(auth, email, pass); }
+    catch(e){ alert('Login error: ' + e.message); }
+  });
+
+  logoutBtn.addEventListener('click', async () => { await signOut(auth); });
+  logoutTop.addEventListener('click', async () => { await signOut(auth); });
+
+  onAuthStateChanged(auth, (user) => {
+    if(user){
+      authModal.style.display = 'none';
+      authModal.setAttribute('aria-hidden','true');
+      greeting.textContent = `Hi, ${user.email.split('@')[0]}!`;
+      logoutTop.style.display = '';
+      // show default tab
+      showSection('fuelTab');
+      // load saved vehicles/trips from localStorage
+      renderVehicles();
+      renderTripsCount();
+    } else {
+      authModal.style.display = 'flex';
+      authModal.setAttribute('aria-hidden','false');
+      greeting.textContent = 'Welcome!';
+      logoutTop.style.display = 'none';
+    }
+  });
+
+  /* ---------- theme ---------- */
+  const savedTheme = localStorage.getItem('rev_theme');
+  if(savedTheme === 'light'){ document.body.classList.add('light-mode'); themeToggle.textContent = '🌙'; } else { themeToggle.textContent = '☀️'; }
+  themeToggle.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light-mode');
+    localStorage.setItem('rev_theme', isLight ? 'light' : 'dark');
+    themeToggle.textContent = isLight ? '🌙' : '☀️';
+  });
+
+  /* ---------- Fuel calc ---------- */
+  calcFuelBtn.addEventListener('click', () => {
+    const d = parseFloat(distanceEl.value);
+    const e = parseFloat(efficiencyEl.value);
+    const fuelType = fuelTypeEl.value;
+    if(!d || !e){ alert('Enter distance and efficiency'); return; }
+    const price = fuelType === 'premium' ? 70 : 60;
+    const liters = d / e;
+    const cost = liters * price;
+    fuelResult.innerHTML = `<strong>Fuel:</strong> ${liters.toFixed(2)} L<br><strong>Est. Cost:</strong> ₱${cost.toFixed(2)}`;
+    fuelResult.classList.remove('hidden');
+    // store last efficiency for trip tab
+    localStorage.setItem('rev_lastEfficiency', String(e));
+  });
+
+  // load last efficiency if exists
+  const lastE = localStorage.getItem('rev_lastEfficiency');
+  if(lastE) efficiencyEl.value = lastE;
+
+  /* ---------- Map + tracking ---------- */
+  function initMapIfNeeded(){
+    if(!map){
+      map = L.map(mapEl).setView([14.1169, 121.1468], 15); // fallback coords
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    }
+  }
+  function initStationsMapIfNeeded(){
+    if(!stationsMap){
+      stationsMap = L.map(stationsMapEl).setView([14.1169, 121.1468], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(stationsMap);
+    }
+  }
+
+  getPositionBtn.addEventListener('click', () => {
+    if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+    navigator.geolocation.getCurrentPosition((p) => {
+      initMapIfNeeded();
+      const { latitude, longitude } = p.coords;
+      map.setView([latitude, longitude], 15);
+      if(!marker) marker = L.marker([latitude, longitude]).addTo(map).bindPopup('You are here').openPopup();
+      else { marker.setLatLng([latitude, longitude]).bindPopup('You are here').openPopup(); }
+    }, (err) => alert('Position error: ' + err.message));
+  });
+
+  startStopTrackBtn.addEventListener('click', () => {
+    if(trackId){
+      navigator.geolocation.clearWatch(trackId); trackId = null; startStopTrackBtn.textContent = 'Start Tracking'; return;
+    }
+    if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+    trackId = navigator.geolocation.watchPosition((p) => {
+      initMapIfNeeded();
+      const { latitude, longitude } = p.coords;
+      if(!marker) marker = L.marker([latitude, longitude]).addTo(map).bindPopup('You are here').openPopup();
+      else marker.setLatLng([latitude, longitude]);
+      map.setView([latitude, longitude]);
+    }, (err) => console.warn('watch error', err), { enableHighAccuracy:true, maximumAge:2000 });
+    startStopTrackBtn.textContent = 'Stop Tracking';
+  });
+
+  /* ---------- Tips ---------- */
+  const tips = [
+    'Use higher gears when possible for fuel economy.',
+    'Avoid aggressive acceleration and heavy braking.',
+    'Keep tires properly inflated.',
+    'Remove unnecessary weight from your vehicle.',
+    'Plan routes to avoid congestion.'
+  ];
+  let tipIdx = 0;
+  newTipBtn.addEventListener('click', () => {
+    tipIdx = (tipIdx + 1) % tips.length;
+    document.querySelector('.card + .card .small').textContent = tips[tipIdx];
+  });
+  copyTipBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(tips[tipIdx]); alert('Tip copied'); }
+    catch(e){ alert('Copy failed'); }
+  });
+
+  /* ---------- Trip estimator ---------- */
+  function CO2FromLiters(liters){
+    // approximate: gasoline ~ 2.31 kg CO2 per litre (global average ~2.31)
+    return liters * 2.31;
+  }
+  estimateTripBtn.addEventListener('click', () => {
+    const d = parseFloat(tripDistanceEl.value);
+    if(!d){ alert('Enter trip distance'); return; }
+    let eff = parseFloat(localStorage.getItem('rev_lastEfficiency') || efficiencyEl.value) || null;
+    if(!eff){ eff = parseFloat(prompt('Enter your vehicle fuel efficiency (km/L) for this estimate:')) || 0; }
+    if(!eff){ alert('Efficiency needed'); return; }
+    const liters = d / eff;
+    // choose fuel price from selected in fuel tab
+    const price = (fuelTypeEl.value === 'premium') ? 70 : 60;
+    const cost = liters * price;
+    const co2 = CO2FromLiters(liters);
+    tripResult.innerHTML = `<strong>Trip:</strong> ${d} km<br><strong>Fuel:</strong> ${liters.toFixed(2)} L<br><strong>Cost:</strong> ₱${cost.toFixed(2)}<br><strong>CO₂:</strong> ${co2.toFixed(2)} kg`;
+    tripResult.classList.remove('hidden');
+  });
+
+  // Save trip to localStorage (simple)
+  saveTripBtn.addEventListener('click', () => {
+    const html = tripResult.innerHTML;
+    if(!html){ alert('Estimate before saving'); return; }
+    const saved = JSON.parse(localStorage.getItem('rev_savedTrips') || '[]');
+    saved.push({ html, date: new Date().toISOString() });
+    localStorage.setItem('rev_savedTrips', JSON.stringify(saved));
+    alert('Trip saved');
+    renderTripsCount();
+  });
+  function renderTripsCount(){
+    const saved = JSON.parse(localStorage.getItem('rev_savedTrips') || '[]');
+    tripsCountEl.textContent = saved.length;
+  }
+
+  /* ---------- Stations (demo) ---------- */
+  findStationsBtn.addEventListener('click', () => {
+    if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+    navigator.geolocation.getCurrentPosition((p) => {
+      initStationsMapIfNeeded();
+      const { latitude, longitude } = p.coords;
+      stationsMap.setView([latitude, longitude], 14);
+      // simulate 3 stations around you
+      const demo = [
+        {name:'Shell Tanauan', price:65.40, lat:latitude+0.01, lon:longitude-0.01},
+        {name:'Petron Highway', price:64.90, lat:latitude-0.008, lon:longitude+0.012},
+        {name:'Caltex Plaza', price:66.20, lat:latitude+0.004, lon:longitude+0.009}
+      ];
+      // clear previous
+      stationsMarkers.forEach(m => stationsMap.removeLayer(m)); stationsMarkers = [];
+      stationsList.innerHTML = '';
+      demo.forEach(s => {
+        const m = L.marker([s.lat, s.lon]).addTo(stationsMap).bindPopup(`${s.name}<br>₱${s.price.toFixed(2)}/L`);
+        stationsMarkers.push(m);
+        const li = document.createElement('li');
+        li.textContent = `${s.name} — ₱${s.price.toFixed(2)}/L`;
+        stationsList.appendChild(li);
+      });
+    }, (err) => alert('Position error: ' + err.message));
+  });
+
+  /* ---------- Profile vehicles ---------- */
+  addVehicleBtn.addEventListener('click', () => {
+    const name = vehicleName.value.trim();
+    if(!name) return alert('Enter vehicle name');
+    const vehicles = JSON.parse(localStorage.getItem('rev_vehicles') || '[]');
+    vehicles.push({name, added: new Date().toISOString()});
+    localStorage.setItem('rev_vehicles', JSON.stringify(vehicles));
+    vehicleName.value = '';
+    renderVehicles();
+  });
+  function renderVehicles(){
+    const vehicles = JSON.parse(localStorage.getItem('rev_vehicles') || '[]');
+    vehicleList.innerHTML = '';
+    vehicles.forEach((v, idx) => {
+      const li = document.createElement('li');
+      li.textContent = v.name;
+      li.style.display = 'flex';
+      li.style.justifyContent = 'space-between';
+      li.style.alignItems = 'center';
+      const del = document.createElement('button');
+      del.textContent = 'Remove';
+      del.className = 'btn-sm';
+      del.addEventListener('click', () => {
+        vehicles.splice(idx,1);
+        localStorage.setItem('rev_vehicles', JSON.stringify(vehicles));
+        renderVehicles();
+      });
+      li.appendChild(del);
+      vehicleList.appendChild(li);
+    });
+  }
+  renderVehicles();
+  renderTripsCount();
+
+  // ensure initial map placeholders exist but not fully initiated until needed
+  // done by initMapIfNeeded/initStationsMapIfNeeded
+
+  // small UX: pressing Enter on modal login/register triggers action
+  document.getElementById('authEmail').addEventListener('keyup', (e)=>{ if(e.key==='Enter') doLogin.click(); });
+  document.getElementById('authPass').addEventListener('keyup', (e)=>{ if(e.key==='Enter') doLogin.click(); });
+  document.getElementById('regEmail').addEventListener('keyup',(e)=>{ if(e.key==='Enter') doRegister.click(); });
+  document.getElementById('regPass').addEventListener('keyup',(e)=>{ if(e.key==='Enter') doRegister.click(); });
+
+  // prevent accidental map zoom when scrolling in app-body (small improvement)
+  document.querySelectorAll('.map').forEach(el=>{
+    el.addEventListener('wheel', (ev)=>{ ev.stopPropagation(); }, { passive:false });
+  });
+
+  </script>
+</body>
+</html>
